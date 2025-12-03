@@ -30,17 +30,22 @@ router.post('/register', async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email, passwordHash });
+
+    // Make the first ever user an admin for convenience; everyone else is "user"
+    const userCount = await User.countDocuments();
+    const role = userCount === 0 ? 'admin' : 'user';
+
+    const user = await User.create({ name, email, passwordHash, role });
 
     const token = jwt.sign(
-      { sub: user._id.toString(), email: user.email },
+      { sub: user._id.toString(), email: user.email, role: user.role },
       process.env.JWT_SECRET || 'dev_secret',
       { expiresIn: '7d' }
     );
 
     res.status(201).json({
       token,
-      user: { id: user._id, name: user.name, email: user.email }
+      user: { id: user._id, name: user.name, email: user.email, role: user.role }
     });
   } catch (err) {
     console.error(err);
@@ -65,14 +70,14 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { sub: user._id.toString(), email: user.email },
+      { sub: user._id.toString(), email: user.email, role: user.role },
       process.env.JWT_SECRET || 'dev_secret',
       { expiresIn: '7d' }
     );
 
     res.json({
       token,
-      user: { id: user._id, name: user.name, email: user.email }
+      user: { id: user._id, name: user.name, email: user.email, role: user.role }
     });
   } catch (err) {
     console.error(err);
@@ -82,7 +87,7 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('name email createdAt');
+    const user = await User.findById(req.user.id).select('name email role createdAt');
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json({ user });
   } catch (err) {
